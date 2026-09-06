@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jacek Caban <jacek@codeweavers.com>
+Date: Sun, 6 Sep 2026 12:38:52 +0200
+Subject: [PATCH 02/14] ntdll: Use correct Pc offset in ARM64EC
+ process_breakpoint_handler.
+
+The context uses x86_64 layout.
+
+(cherry picked from commit 80e1217aa09ff493c165f0392048046ec5f97797)
+---
+ dlls/ntdll/signal_arm64ec.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/dlls/ntdll/signal_arm64ec.c b/dlls/ntdll/signal_arm64ec.c
+index 712d7f41779..293c17c379e 100644
+--- a/dlls/ntdll/signal_arm64ec.c
++++ b/dlls/ntdll/signal_arm64ec.c
+@@ -2166,9 +2166,9 @@ __ASM_GLOBAL_FUNC( "#process_breakpoint",
+                    "brk #0xf000\n\t"
+                    "ret\n"
+                    "process_breakpoint_handler:\n\t"
+-                   "ldr x4, [x2, #0x108]\n\t" /* context->Pc */
++                   "ldr x4, [x2, #0xf8]\n\t"  /* context->Rip */
+                    "add x4, x4, #4\n\t"
+-                   "str x4, [x2, #0x108]\n\t"
++                   "str x4, [x2, #0xf8]\n\t"
+                    "mov w0, #0\n\t"           /* ExceptionContinueExecution */
+                    "ret" )
+ 
