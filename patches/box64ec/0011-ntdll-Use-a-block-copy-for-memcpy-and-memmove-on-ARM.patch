@@ -1,0 +1,143 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: airidosas252 <airidaslideikis@gmail.com>
+Date: Mon, 16 Nov 2026 21:23:02 +0200
+Subject: [PATCH 11/14] ntdll: Use a block copy for memcpy and memmove on
+ ARM64.
+
+---
+ dlls/ntdll/string.c | 94 +++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 94 insertions(+)
+
+diff --git a/dlls/ntdll/string.c b/dlls/ntdll/string.c
+index 05c17a17a51..7af73b56579 100644
+--- a/dlls/ntdll/string.c
++++ b/dlls/ntdll/string.c
+@@ -95,6 +95,92 @@ int __cdecl memcmp( const void *ptr1, const void *ptr2, size_t n )
+ }
+ 
+ 
++#if defined(__aarch64__) || defined(__arm64ec__)
++/* Copies with unaligned, overlapping loads and stores. Every load of a block happens before
++ * the stores that could overwrite it, so this is also a correct memmove. */
++static void *arm64_memmove( void *dst, const void *src, size_t n )
++{
++    typedef uint64_t DECLSPEC_ALIGN(1) unaligned_ui64;
++    typedef uint32_t DECLSPEC_ALIGN(1) unaligned_ui32;
++    typedef uint16_t DECLSPEC_ALIGN(1) unaligned_ui16;
++#define LD(p) (*(const unaligned_ui64 *)(p))
++#define ST(p, v) (*(unaligned_ui64 *)(p) = (v))
++    unsigned char *d = dst;
++    const unsigned char *s = src;
++    uint64_t a, b, c, e, f, g, h, k;
++    size_t i;
++
++    if (n <= 16)
++    {
++        if (n >= 8)
++        {
++            a = LD(s); b = LD(s + n - 8);
++            ST(d, a); ST(d + n - 8, b);
++        }
++        else if (n >= 4)
++        {
++            uint32_t x = *(const unaligned_ui32 *)s, y = *(const unaligned_ui32 *)(s + n - 4);
++            *(unaligned_ui32 *)d = x; *(unaligned_ui32 *)(d + n - 4) = y;
++        }
++        else if (n >= 2)
++        {
++            uint16_t x = *(const unaligned_ui16 *)s, y = *(const unaligned_ui16 *)(s + n - 2);
++            *(unaligned_ui16 *)d = x; *(unaligned_ui16 *)(d + n - 2) = y;
++        }
++        else if (n) *d = *s;
++        return dst;
++    }
++    if (n <= 32)
++    {
++        a = LD(s); b = LD(s + 8); c = LD(s + n - 16); e = LD(s + n - 8);
++        ST(d, a); ST(d + 8, b); ST(d + n - 16, c); ST(d + n - 8, e);
++        return dst;
++    }
++    if (n <= 64)
++    {
++        a = LD(s); b = LD(s + 8); c = LD(s + 16); e = LD(s + 24);
++        f = LD(s + n - 32); g = LD(s + n - 24); h = LD(s + n - 16); k = LD(s + n - 8);
++        ST(d, a); ST(d + 8, b); ST(d + 16, c); ST(d + 24, e);
++        ST(d + n - 32, f); ST(d + n - 24, g); ST(d + n - 16, h); ST(d + n - 8, k);
++        return dst;
++    }
++
++    if ((size_t)d - (size_t)s >= n)
++    {
++        /* forward: the last 64 source bytes are read before anything is stored */
++        a = LD(s + n - 64); b = LD(s + n - 56); c = LD(s + n - 48); e = LD(s + n - 40);
++        f = LD(s + n - 32); g = LD(s + n - 24); h = LD(s + n - 16); k = LD(s + n - 8);
++        for (i = 0; i < n - 64; i += 64)
++        {
++            uint64_t v0 = LD(s + i), v1 = LD(s + i + 8), v2 = LD(s + i + 16), v3 = LD(s + i + 24);
++            uint64_t v4 = LD(s + i + 32), v5 = LD(s + i + 40), v6 = LD(s + i + 48), v7 = LD(s + i + 56);
++            ST(d + i, v0); ST(d + i + 8, v1); ST(d + i + 16, v2); ST(d + i + 24, v3);
++            ST(d + i + 32, v4); ST(d + i + 40, v5); ST(d + i + 48, v6); ST(d + i + 56, v7);
++        }
++        ST(d + n - 64, a); ST(d + n - 56, b); ST(d + n - 48, c); ST(d + n - 40, e);
++        ST(d + n - 32, f); ST(d + n - 24, g); ST(d + n - 16, h); ST(d + n - 8, k);
++    }
++    else
++    {
++        /* backward: the first 64 source bytes are read before anything is stored */
++        a = LD(s); b = LD(s + 8); c = LD(s + 16); e = LD(s + 24);
++        f = LD(s + 32); g = LD(s + 40); h = LD(s + 48); k = LD(s + 56);
++        for (i = n; i > 64; i -= 64)
++        {
++            uint64_t v0 = LD(s + i - 64), v1 = LD(s + i - 56), v2 = LD(s + i - 48), v3 = LD(s + i - 40);
++            uint64_t v4 = LD(s + i - 32), v5 = LD(s + i - 24), v6 = LD(s + i - 16), v7 = LD(s + i - 8);
++            ST(d + i - 64, v0); ST(d + i - 56, v1); ST(d + i - 48, v2); ST(d + i - 40, v3);
++            ST(d + i - 32, v4); ST(d + i - 24, v5); ST(d + i - 16, v6); ST(d + i - 8, v7);
++        }
++        ST(d, a); ST(d + 8, b); ST(d + 16, c); ST(d + 24, e);
++        ST(d + 32, f); ST(d + 40, g); ST(d + 48, h); ST(d + 56, k);
++    }
++    return dst;
++#undef LD
++#undef ST
++}
++#endif
++
+ /*********************************************************************
+  *                  memcpy   (NTDLL.@)
+  *
+@@ -103,6 +189,9 @@ int __cdecl memcmp( const void *ptr1, const void *ptr2, size_t n )
+  */
+ void * __cdecl memcpy( void *dst, const void *src, size_t n )
+ {
++#if defined(__aarch64__) || defined(__arm64ec__)
++    return arm64_memmove( dst, src, n );
++#else
+     unsigned char *d = dst;
+     const unsigned char *s = src;
+ 
+@@ -117,6 +206,7 @@ void * __cdecl memcpy( void *dst, const void *src, size_t n )
+         while (n--) *d-- = *s--;
+     }
+     return dst;
++#endif
+ }
+ 
+ 
+@@ -125,6 +215,9 @@ void * __cdecl memcpy( void *dst, const void *src, size_t n )
+  */
+ void * __cdecl memmove( void *dst, const void *src, size_t n )
+ {
++#if defined(__aarch64__) || defined(__arm64ec__)
++    return arm64_memmove( dst, src, n );
++#else
+     unsigned char *d = dst;
+     const unsigned char *s = src;
+ 
+@@ -139,6 +232,7 @@ void * __cdecl memmove( void *dst, const void *src, size_t n )
+         while (n--) *d-- = *s--;
+     }
+     return dst;
++#endif
+ }
+ 
+ 
