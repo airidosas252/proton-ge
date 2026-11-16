@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: airidosas252 <airidaslideikis@gmail.com>
+Date: Mon, 16 Nov 2026 19:26:04 +0200
+Subject: [PATCH 09/14] ntdll: Report AVX state on ARM64EC only when the
+ emulator supports AVX.
+
+Also don't copy YMM registers when the context has no AVX area.
+---
+ dlls/ntdll/exception.c      | 4 ++++
+ dlls/ntdll/signal_arm64ec.c | 3 ++-
+ dlls/ntdll/unwind.h         | 7 ++++---
+ 3 files changed, 10 insertions(+), 4 deletions(-)
+
+diff --git a/dlls/ntdll/exception.c b/dlls/ntdll/exception.c
+index 3b524d087dc..899faabce87 100644
+--- a/dlls/ntdll/exception.c
++++ b/dlls/ntdll/exception.c
+@@ -559,6 +559,10 @@ void WINAPI RtlGetCallersAddress( void **caller, void **parent )
+  */
+ ULONG64 WINAPI RtlGetEnabledExtendedFeatures(ULONG64 feature_mask)
+ {
++#ifdef __arm64ec__
++    /* the emulator decides whether x64 code gets AVX */
++    if (!RtlIsProcessorFeaturePresent( PF_AVX_INSTRUCTIONS_AVAILABLE )) return 0;
++#endif
+     return user_shared_data->XState.EnabledFeatures & feature_mask;
+ }
+ 
+diff --git a/dlls/ntdll/signal_arm64ec.c b/dlls/ntdll/signal_arm64ec.c
+index 293c17c379e..1f7255f1d00 100644
+--- a/dlls/ntdll/signal_arm64ec.c
++++ b/dlls/ntdll/signal_arm64ec.c
+@@ -63,7 +63,8 @@ static NTSTATUS (WINAPI *pThreadInit)(void);
+ static void     (WINAPI *pThreadTerm)(HANDLE,LONG);
+ static void     (WINAPI *pUpdateProcessorInformation)(SYSTEM_CPU_INFORMATION*);
+ 
+-static BOOLEAN emulated_processor_features[PROCESSOR_FEATURE_MAX];
++/* assume AVX until the emulator is loaded, so early contexts keep room for it */
++static BOOLEAN emulated_processor_features[PROCESSOR_FEATURE_MAX] = { [PF_AVX_INSTRUCTIONS_AVAILABLE] = TRUE };
+ static BYTE KiUserExceptionDispatcher_orig[16]; /* to detect patching */
+ extern void KiUserExceptionDispatcher_thunk(void) asm("EXP+#KiUserExceptionDispatcher");
+ 
+diff --git a/dlls/ntdll/unwind.h b/dlls/ntdll/unwind.h
+index 6e8b7166a56..175a45b83c8 100644
+--- a/dlls/ntdll/unwind.h
++++ b/dlls/ntdll/unwind.h
+@@ -176,7 +176,7 @@ static inline void context_x64_to_arm( ARM64_NT_CONTEXT *arm_ctx, const ARM64EC_
+     {
+         CONTEXT_EX *ec_xctx = (CONTEXT_EX *)(ec_ctx + 1);
+         YMMCONTEXT *ec_ymm = RtlLocateExtendedFeature( ec_xctx, XSTATE_AVX, NULL );
+-        memcpy( arm_ctx->V + 16, ec_ymm, sizeof(*ec_ymm) );
++        if (ec_ymm) memcpy( arm_ctx->V + 16, ec_ymm, sizeof(*ec_ymm) );
+     }
+ }
+ 
+@@ -229,11 +229,12 @@ static inline void context_arm_to_x64( ARM64EC_NT_CONTEXT *ec_ctx, const ARM64_N
+ 
+     memcpy( ec_ctx->V, arm_ctx->V, sizeof(ec_ctx->V) );
+ 
+-    if ((arm_ctx->ContextFlags & CONTEXT_ARM64_FEX_YMMSTATE) == CONTEXT_ARM64_FEX_YMMSTATE)
++    if ((arm_ctx->ContextFlags & CONTEXT_ARM64_FEX_YMMSTATE) == CONTEXT_ARM64_FEX_YMMSTATE &&
++        RtlGetEnabledExtendedFeatures( XSTATE_MASK_GSSE ))
+     {
+         CONTEXT_EX *ec_xctx = (CONTEXT_EX *)(ec_ctx + 1);
+         YMMCONTEXT *ec_ymm = RtlLocateExtendedFeature( ec_xctx, XSTATE_AVX, NULL );
+-        memcpy( ec_ymm, arm_ctx->V + 16, sizeof(*ec_ymm) );
++        if (ec_ymm) memcpy( ec_ymm, arm_ctx->V + 16, sizeof(*ec_ymm) );
+     }
+ }
+ 
