@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: airidosas252 <airidaslideikis@gmail.com>
+Date: Mon, 16 Nov 2026 21:23:01 +0200
+Subject: [PATCH 08/14] wow64: Default to wowbox64.dll as the x86 emulator on
+ ARM64.
+
+---
+ dlls/wow64/syscall.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/wow64/syscall.c b/dlls/wow64/syscall.c
+index 04382a816e4..cb2035c03ab 100644
+--- a/dlls/wow64/syscall.c
++++ b/dlls/wow64/syscall.c
+@@ -754,7 +754,7 @@ static const WCHAR *get_cpu_dll_name(void)
+     {
+     case IMAGE_FILE_MACHINE_I386:
+         RtlInitUnicodeString( &nameW, L"\\Registry\\Machine\\Software\\Microsoft\\Wow64\\x86" );
+-        ret = (native_machine == IMAGE_FILE_MACHINE_ARM64 ? L"libwow64fex.dll" : L"wow64cpu.dll");
++        ret = (native_machine == IMAGE_FILE_MACHINE_ARM64 ? L"wowbox64.dll" : L"wow64cpu.dll");
+         break;
+     case IMAGE_FILE_MACHINE_ARMNT:
+         RtlInitUnicodeString( &nameW, L"\\Registry\\Machine\\Software\\Microsoft\\Wow64\\arm" );
+@@ -772,6 +772,7 @@ static const WCHAR *get_cpu_dll_name(void)
+     {
+         ((WCHAR *)info->Data)[info->DataLength / sizeof(WCHAR)] = 0;
+         if ((native_machine == IMAGE_FILE_MACHINE_AMD64 && (!wcscmp( (WCHAR *)info->Data, L"libwow64fex.dll")
++                                                            || !wcscmp( (WCHAR *)info->Data, L"wowbox64.dll")
+                                                             || !wcscmp( (WCHAR *)info->Data, L"xtajit64.dll")))
+             || (native_machine == IMAGE_FILE_MACHINE_ARM64 && !wcscmp( (WCHAR *)info->Data, L"wow64cpu.dll")))
+             ERR( "cpu dll is wrong for native_machine %#x, using default.\n", native_machine );
