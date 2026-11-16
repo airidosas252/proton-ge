@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: airidosas252 <airidaslideikis@gmail.com>
+Date: Mon, 16 Nov 2026 21:23:01 +0200
+Subject: [PATCH 07/14] ntdll: Default to box64ec.dll as the ARM64EC emulator.
+
+---
+ dlls/ntdll/loader.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dlls/ntdll/loader.c b/dlls/ntdll/loader.c
+index a9cdfb8f1f4..f6e34e80e66 100644
+--- a/dlls/ntdll/loader.c
++++ b/dlls/ntdll/loader.c
+@@ -4883,7 +4883,7 @@ static void load_arm64ec_module(void)
+     ULONG buffer[16];
+     KEY_VALUE_PARTIAL_INFORMATION *info = (KEY_VALUE_PARTIAL_INFORMATION *)buffer;
+     UNICODE_STRING nameW = RTL_CONSTANT_STRING( L"\\Registry\\Machine\\Software\\Microsoft\\Wow64\\amd64" );
+-    WCHAR module[64] = L"C:\\windows\\system32\\libarm64ecfex.dll";
++    WCHAR module[64] = L"C:\\windows\\system32\\box64ec.dll";
+     OBJECT_ATTRIBUTES attr;
+     WINE_MODREF *wm;
+     NTSTATUS status;
