@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: airidosas252 <airidaslideikis@gmail.com>
+Date: Mon, 16 Nov 2026 19:24:16 +0200
+Subject: [PATCH 01/14] kernelbase: Flush the instruction cache on ARM64EC.
+
+Clang also defines __x86_64__ for ARM64EC, so the x86 shortcut skipped
+the flush and the emulator never got notified.
+---
+ dlls/kernelbase/memory.c | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/dlls/kernelbase/memory.c b/dlls/kernelbase/memory.c
+index 99fc3e2d6d3..5d0f191707b 100644
+--- a/dlls/kernelbase/memory.c
++++ b/dlls/kernelbase/memory.c
+@@ -132,14 +132,14 @@ BOOL WINAPI DECLSPEC_HOTPATCH FlushViewOfFile( const void *base, SIZE_T size )
+ /****************************************************************************
+  *           FlushInstructionCache   (kernelbase.@)
+  */
+-#if defined(__i386__) || defined(__x86_64__)
++#if (defined(__i386__) || defined(__x86_64__)) && !defined(__arm64ec__)
+ BOOL WINAPI DECLSPEC_HOTPATCH FlushInstructionCache( HANDLE process, LPCVOID addr, SIZE_T size )
+ {
+     /* X86 processors have coherent instruction and data caches, no need to do anything */
+     return TRUE;
+ }
+ #else
+-static BOOL flush_instruction_cache( HANDLE process, LPCVOID addr, SIZE_T size )
++static BOOL __attribute__((used)) flush_instruction_cache( HANDLE process, LPCVOID addr, SIZE_T size )
+ {
+     CROSS_PROCESS_WORK_LIST *list;
+ 
+@@ -157,12 +157,16 @@ BOOL WINAPI __attribute__((naked)) FlushInstructionCache( HANDLE process, LPCVOI
+ {
+     asm( ".seh_proc \"#FlushInstructionCache\"\n\t"
+          "stp x29, x30, [sp, #-32]!\n\t"
+-         "str x1, [sp, #16]\n\t"
+          ".seh_save_fplr_x 32\n\t"
++         "str x1, [sp, #16]\n\t"
++         ".seh_nop\n\t"
+          ".seh_endprologue\n\t"
+          "bl \"#flush_instruction_cache\"\n\t"
+          "ldr x1, [sp, #16]\n\t"
++         ".seh_startepilogue\n\t"
+          "ldp x29, x30, [sp], #32\n\t"
++         ".seh_save_fplr_x 32\n\t"
++         ".seh_endepilogue\n\t"
+          "ret\n\t"
+          ".seh_endproc" );
+ }
