@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Benjamin Fischer <bfis@gmx.net>
+Date: Mon, 16 Nov 2026 19:25:04 +0200
+Subject: [PATCH 05/14] msvcrt: Avoid expensive timezone queries from plain
+ time() calls.
+
+_time32() keeps truncating, as before in this tree.
+
+(cherry picked from commit 0497d0ff62f0513136263bb2b6168a6496a06454)
+---
+ dlls/msvcrt/time.c | 14 ++++++--------
+ 1 file changed, 6 insertions(+), 8 deletions(-)
+
+diff --git a/dlls/msvcrt/time.c b/dlls/msvcrt/time.c
+index 8199fe01649..8a416cfe5cb 100644
+--- a/dlls/msvcrt/time.c
++++ b/dlls/msvcrt/time.c
+@@ -780,11 +780,12 @@ int CDECL _ftime32_s(struct __timeb32 *buf)
+ __time64_t CDECL _time64(__time64_t *buf)
+ {
+     __time64_t curtime;
+-    struct __timeb64 tb;
+-
+-    _ftime64(&tb);
++    FILETIME ft;
++    ULONGLONG time;
+ 
+-    curtime = tb.time;
++    GetSystemTimeAsFileTime(&ft);
++    time = ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
++    curtime = time / TICKSPERSEC - SECS_1601_TO_1970;
+     return buf ? *buf = curtime : curtime;
+ }
+ 
+@@ -794,11 +795,8 @@ __time64_t CDECL _time64(__time64_t *buf)
+ __time32_t CDECL _time32(__time32_t *buf)
+ {
+     __time32_t curtime;
+-    struct __timeb64 tb;
+-
+-    _ftime64(&tb);
+ 
+-    curtime = tb.time;
++    curtime = _time64(NULL);
+     return buf ? *buf = curtime : curtime;
+ }
+ 
