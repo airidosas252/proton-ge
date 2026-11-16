@@ -139,3 +139,7 @@
 [submodule "sbc"]
 	path = sbc
 	url = https://git.kernel.org/pub/scm/bluetooth/sbc.git
+[submodule "box64"]
+	path = box64
+	url = https://github.com/ptitSeb/box64.git
+	branch = main

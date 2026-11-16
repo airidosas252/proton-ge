@@ -1077,6 +1077,30 @@ endif
 
 
 ##
+## Box64EC and WowBox64
+##
+
+ifneq ($(findstring aarch64,$(unix_ARCHS)),)
+# Only the two PE DLLs are built, with Box64's own llvm-mingw toolchain files and flags,
+# so they match the DLLs Box64 releases (Proton's unix CFLAGS would otherwise reach them).
+BOX64_CMAKE_ARGS = -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS= -DCMAKE_ASM_FLAGS= \
+  -DARM64=ON -DARM64EC=ON -DWOW64=ON -DNOBOX64=ON
+
+$(eval $(call rules-source,box64,$(SRCDIR)/box64))
+$(eval $(call rules-cmake,box64,aarch64,unix))
+
+$(OBJ)/.box64-aarch64-post-build:
+	mkdir -p $(BOX64_aarch64_DST)/lib/wine/aarch64-windows
+	cp -a $(BOX64_aarch64_OBJ)/box64ec-prefix/src/box64ec-build/box64ec.dll \
+	      $(BOX64_aarch64_OBJ)/wowbox64-prefix/src/wowbox64-build/wowbox64.dll \
+	      $(BOX64_aarch64_DST)/lib/wine/aarch64-windows/
+	touch $@
+
+default_pfx: box64
+endif
+
+
+##
 ## BattlEye Bridge
 ##
 
