@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: airidosas252 <airidaslideikis@gmail.com>
+Date: Mon, 16 Nov 2026 21:23:01 +0200
+Subject: [PATCH 06/14] loader: Use box64ec.dll and wowbox64.dll as the default
+ x86 emulators on ARM64.
+
+---
+ loader/wine.inf.in | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/loader/wine.inf.in b/loader/wine.inf.in
+index 3d6bf40094e..77b2cae7085 100644
+--- a/loader/wine.inf.in
++++ b/loader/wine.inf.in
+@@ -419,9 +419,9 @@ HKLM,%CurrentVersion%,"ProgramFilesDir (x86)",,"%16426%"
+ HKLM,%CurrentVersion%,"CommonFilesDir (x86)",,"%16428%"
+ HKLM,%CurrentVersion%,"ProgramFilesDir (Arm)",,"C:\Program Files (Arm)"
+ HKLM,%CurrentVersion%,"CommonFilesDir (Arm)",,"C:\Program Files (Arm)\Common Files"
+-HKLM,Software\Microsoft\Wow64\amd64,,,"libarm64ecfex.dll"
++HKLM,Software\Microsoft\Wow64\amd64,,,"box64ec.dll"
+ HKLM,Software\Microsoft\Wow64\arm,,2,"wowarmhw.dll"
+-HKLM,Software\Microsoft\Wow64\x86,,,"libwow64fex.dll"
++HKLM,Software\Microsoft\Wow64\x86,,,"wowbox64.dll"
+ 
+ [CurrentVersionWow64.ntx86]
+ HKLM,%CurrentVersion%,"ProgramFilesDir (x86)",,"%16422%"
