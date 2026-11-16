@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: airidosas252 <airidaslideikis@gmail.com>
+Date: Mon, 16 Nov 2026 19:26:04 +0200
+Subject: [PATCH 09/20] ntdll: Report AVX state on ARM64EC only when the
+ emulator supports AVX.
+
+---
+ dlls/ntdll/exception.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/dlls/ntdll/exception.c b/dlls/ntdll/exception.c
+index 830175698ba..78bff8c38a1 100644
+--- a/dlls/ntdll/exception.c
++++ b/dlls/ntdll/exception.c
+@@ -712,6 +712,10 @@ static int xstate_get_size( const XSTATE_CONFIGURATION *xstate_config, UINT64 ma
+  */
+ ULONG64 WINAPI RtlGetEnabledExtendedFeatures(ULONG64 feature_mask)
+ {
++#ifdef __arm64ec__
++    /* the emulator decides whether x64 code gets AVX */
++    if (!RtlIsProcessorFeaturePresent( PF_AVX_INSTRUCTIONS_AVAILABLE )) feature_mask &= ~(ULONG64)XSTATE_MASK_AVX;
++#endif
+     return get_xstate_config()->EnabledFeatures & feature_mask;
+ }
+ 
