@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: airidosas252 <airidaslideikis@gmail.com>
+Date: Mon, 16 Nov 2026 21:53:00 +0200
+Subject: [PATCH 14/14] win32u: Use sched_yield() for message wait yields.
+
+The result of NtYieldExecution() is ignored there, and its getrusage()
+calls cost more than the yield itself.
+---
+ dlls/win32u/message.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/dlls/win32u/message.c b/dlls/win32u/message.c
+index e8067007269..b79a90e7a4a 100644
+--- a/dlls/win32u/message.c
++++ b/dlls/win32u/message.c
+@@ -25,6 +25,7 @@
+ #endif
+ 
+ #include <assert.h>
++#include <sched.h>
+ #include "ntstatus.h"
+ #define WIN32_NO_STATUS
+ #include "winternl.h"
+@@ -3544,7 +3545,7 @@ static DWORD wait_message( DWORD count, const HANDLE *handles, DWORD timeout, DW
+         ret = WAIT_FAILED;
+     }
+ 
+-    if (ret == WAIT_TIMEOUT && !count && !timeout) NtYieldExecution();
++    if (ret == WAIT_TIMEOUT && !count && !timeout) sched_yield();
+     if (ret == count - 1) get_user_thread_info()->last_driver_time = get_driver_check_time();
+ 
+     KeUserDispatchCallback( &params.dispatch, sizeof(params), &ret_ptr, &ret_len );
+@@ -3690,7 +3691,7 @@ BOOL WINAPI NtUserPeekMessage( MSG *msg_out, HWND hwnd, UINT first, UINT last, U
+                 params.locks = *(DWORD *)ret_ptr;
+                 params.restore = TRUE;
+             }
+-            NtYieldExecution();
++            sched_yield();
+             KeUserDispatchCallback( &params.dispatch, sizeof(params), &ret_ptr, &ret_len );
+         }
+         return FALSE;
