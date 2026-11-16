@@ -1,0 +1,157 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: airidosas252 <airidaslideikis@gmail.com>
+Date: Mon, 16 Nov 2026 19:27:43 +0200
+Subject: [PATCH 10/14] ntdll: Read QueryPerformanceCounter from the ARM
+ generic timer on ARM64EC.
+
+The timer rate is checked against the syscall once, and the offset is
+retaken when the timer drifts from the unix clock, e.g. after system
+suspend.
+---
+ dlls/ntdll/time.c | 126 ++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 126 insertions(+)
+
+diff --git a/dlls/ntdll/time.c b/dlls/ntdll/time.c
+index b594b9b1214..c39e11f9281 100644
+--- a/dlls/ntdll/time.c
++++ b/dlls/ntdll/time.c
+@@ -689,6 +689,110 @@ static BOOL qpc_tsc_counter( LARGE_INTEGER *counter )
+ }
+ #endif
+ 
++#ifdef __arm64ec__
++/* The ARM generic timer ticks at a fixed rate on every core and user mode can read it, so
++ * QPC does not need a syscall. QPC stays on the unix side's clock (CLOCK_MONOTONIC_RAW, also
++ * used for audio timestamps and by other processes): its rate is checked once against the
++ * syscall, because some firmware reports a wrong CNTFRQ, and the offset is re-taken when the
++ * system was suspended, which the unix clock does not count but the timer may. */
++static ULONG64 qpc_cnt_freq, qpc_cnt_mult; /* 100ns ticks per timer tick, 32.32 fixed point */
++static LONGLONG qpc_cnt_offset;            /* QPC = scaled timer + offset */
++static LONG qpc_cnt_state;                 /* 0: calibrating, 1: use the timer, -1: use the syscall */
++static RTL_SRWLOCK qpc_cnt_lock = RTL_SRWLOCK_INIT;
++
++static inline ULONG64 read_cntvct(void)
++{
++    ULONG64 value;
++    __asm__ __volatile__( "isb\n\tmrs %0, cntvct_el0" : "=r"(value) :: "memory" );
++    return value;
++}
++
++static inline LONGLONG qpc_cnt_ticks( ULONG64 cnt )
++{
++    return ((unsigned __int128)cnt * qpc_cnt_mult) >> 32;
++}
++
++/* wineserver keeps InterruptTime on the unix clock, at most a few updates behind */
++static inline LONGLONG qpc_interrupt_time(void)
++{
++    ULONG high, low;
++
++    do
++    {
++        high = user_shared_data->InterruptTime.High1Time;
++        low = user_shared_data->InterruptTime.LowPart;
++    }
++    while (high != user_shared_data->InterruptTime.High2Time);
++    return (LONGLONG)high << 32 | low;
++}
++
++/* syscall QPC paired with the timer read just before it; a pair split by a preemption would
++ * shift the offset, so it is rejected */
++static BOOL qpc_cnt_sample( LARGE_INTEGER *counter, ULONG64 *cnt )
++{
++    *cnt = read_cntvct();
++    NtQueryPerformanceCounter( counter, NULL );
++    return read_cntvct() - *cnt <= qpc_cnt_freq / 100000;
++}
++
++static void qpc_cnt_calibrate( LARGE_INTEGER *counter )
++{
++    static LONGLONG start_ticks;
++    static ULONG64 start_cnt;
++    LONGLONG expected, elapsed;
++    ULONG64 cnt;
++
++    if (!RtlTryAcquireSRWLockExclusive( &qpc_cnt_lock ))
++    {
++        NtQueryPerformanceCounter( counter, NULL );
++        return;
++    }
++    if (!qpc_cnt_freq)
++    {
++        __asm__ __volatile__( "mrs %0, cntfrq_el0" : "=r"(qpc_cnt_freq) );
++        if (!qpc_cnt_freq) qpc_cnt_state = -1;
++    }
++    if (!qpc_cnt_sample( counter, &cnt ) || qpc_cnt_state) goto done;
++    if (!start_ticks)
++    {
++        start_ticks = counter->QuadPart;
++        start_cnt = cnt;
++        goto done;
++    }
++    elapsed = counter->QuadPart - start_ticks;
++    if (elapsed < TICKSPERSEC / 20) goto done;
++    expected = (double)(cnt - start_cnt) * TICKSPERSEC / qpc_cnt_freq;
++    if (expected - elapsed > elapsed / 1000 || elapsed - expected > elapsed / 1000)
++    {
++        qpc_cnt_state = -1;
++        goto done;
++    }
++    qpc_cnt_mult = ((ULONG64)TICKSPERSEC << 32) / qpc_cnt_freq;
++    qpc_cnt_offset = counter->QuadPart - qpc_cnt_ticks( cnt );
++    __atomic_store_n( &qpc_cnt_state, 1, __ATOMIC_RELEASE );
++done:
++    RtlReleaseSRWLockExclusive( &qpc_cnt_lock );
++}
++
++/* the timer drifted from the unix clock by more than InterruptTime's lag: re-take the offset,
++ * but leave small differences alone so that QPC never steps back */
++static void qpc_cnt_resync( LARGE_INTEGER *counter )
++{
++    LONGLONG offset, diff;
++    ULONG64 cnt;
++
++    if (qpc_cnt_sample( counter, &cnt ))
++    {
++        offset = counter->QuadPart - qpc_cnt_ticks( cnt );
++        diff = offset - __atomic_load_n( &qpc_cnt_offset, __ATOMIC_RELAXED );
++        if (diff > TICKSPERSEC / 20 || diff < -TICKSPERSEC / 20)
++            __atomic_store_n( &qpc_cnt_offset, offset, __ATOMIC_RELAXED );
++    }
++    counter->QuadPart = qpc_cnt_ticks( read_cntvct() ) + __atomic_load_n( &qpc_cnt_offset, __ATOMIC_RELAXED );
++}
++#endif
++
++
+ /******************************************************************************
+  *  RtlQueryPerformanceCounter   [NTDLL.@]
+  */
+@@ -696,6 +800,28 @@ BOOL WINAPI DECLSPEC_HOTPATCH RtlQueryPerformanceCounter( LARGE_INTEGER *counter
+ {
+ #if defined(__x86_64__) && !defined(__arm64ec__)
+     if (qpc_tsc_counter( counter )) return TRUE;
++#endif
++#ifdef __arm64ec__
++    LONG state = __atomic_load_n( &qpc_cnt_state, __ATOMIC_ACQUIRE );
++
++    if (state > 0)
++    {
++        LONGLONG value = qpc_cnt_ticks( read_cntvct() ) + __atomic_load_n( &qpc_cnt_offset, __ATOMIC_RELAXED );
++        LONGLONG drift = value - qpc_interrupt_time();
++
++        if (drift > -TICKSPERSEC / 10 && drift < TICKSPERSEC / 10)
++        {
++            counter->QuadPart = value;
++            return TRUE;
++        }
++        qpc_cnt_resync( counter );
++        return TRUE;
++    }
++    if (!state)
++    {
++        qpc_cnt_calibrate( counter );
++        return TRUE;
++    }
+ #endif
+     NtQueryPerformanceCounter( counter, NULL );
+     return TRUE;
