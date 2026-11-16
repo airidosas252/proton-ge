@@ -142,3 +142,7 @@
 [submodule "piper-phonemize"]
 	path = piper-phonemize
 	url = https://github.com/shaunren/piper-phonemize
+[submodule "box64"]
+	path = box64
+	url = https://github.com/ptitSeb/box64.git
+	branch = main
