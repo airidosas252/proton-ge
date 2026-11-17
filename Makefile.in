@@ -1802,6 +1802,8 @@ ifneq ($(findstring x86_64,$(unix_ARCHS)),)
 endif
 ifneq ($(findstring aarch64,$(unix_ARCHS)),)
 	python3 $(SRCDIR)/default_pfx.py $(abspath $(DIST_PREFIX_ARM64)) $(abspath $(DST_DIR)) 1
+	# Box64EC and WowBox64 read per-game settings from %USERPROFILE%\.box64rc
+	cp $(SRCDIR)/box64/system/box64.box64rc $(abspath $(DIST_PREFIX_ARM64))/drive_c/users/steamuser/.box64rc
 endif
 
 all-dist: default_pfx
