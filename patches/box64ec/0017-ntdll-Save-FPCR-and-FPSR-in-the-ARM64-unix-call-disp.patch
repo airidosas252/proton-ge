@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: airidosas252 <airidaslideikis@gmail.com>
+Date: Tue, 17 Nov 2026 14:51:07 +0200
+Subject: [PATCH 17/19] ntdll: Save FPCR and FPSR in the ARM64 unix call
+ dispatcher.
+
+A thread suspended in a unix call got stale values restored, while FPCR
+is nonvolatile, see
+https://learn.microsoft.com/en-us/cpp/build/arm64-windows-abi-conventions#floating-pointsimd-registers
+---
+ dlls/ntdll/unix/signal_arm64.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/dlls/ntdll/unix/signal_arm64.c b/dlls/ntdll/unix/signal_arm64.c
+index 16340a561f9..b1d14d2b81a 100644
+--- a/dlls/ntdll/unix/signal_arm64.c
++++ b/dlls/ntdll/unix/signal_arm64.c
+@@ -1902,6 +1902,10 @@ __ASM_GLOBAL_FUNC( __wine_unix_call_dispatcher,
+                    "stp x30, x9, [x10, #0xf0]\n\t"
+                    "mrs x9, NZCV\n\t"
+                    "stp x30, x9, [x10, #0x100]\n\t"
++                   "mrs x9, FPCR\n\t"
++                   "str w9, [x10, #0x128]\n\t"
++                   "mrs x9, FPSR\n\t"
++                   "str w9, [x10, #0x12c]\n\t"
+                    /* switch to kernel stack */
+                    "mov sp, x10\n\t"
+                    /* we're now on the kernel stack, stitch unwind info with previous frame */
