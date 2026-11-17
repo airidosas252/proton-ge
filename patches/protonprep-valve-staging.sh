@@ -791,6 +791,9 @@ apply_all_in_dir() {
     echo "WINE: -PIPEWIRE- add winepipewire.drv"
     apply_all_in_dir "../patches/wine-hotfixes/winepipewire/"
 
+    echo "WINE: -BOX64EC- Box64EC and WowBox64 patches"
+    apply_all_in_dir "../patches/box64ec"
+
     echo "WINE: RUN AUTOCONF TOOLS/MAKE_REQUESTS"
     autoreconf -f
     ./tools/make_requests
