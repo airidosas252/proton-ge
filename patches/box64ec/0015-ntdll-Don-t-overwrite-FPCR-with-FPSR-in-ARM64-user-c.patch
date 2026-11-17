@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: airidosas252 <airidaslideikis@gmail.com>
+Date: Tue, 17 Nov 2026 14:50:31 +0200
+Subject: [PATCH 15/19] ntdll: Don't overwrite FPCR with FPSR in ARM64 user
+ callbacks.
+
+FPCR control bits are nonvolatile, see
+https://learn.microsoft.com/en-us/cpp/build/arm64-windows-abi-conventions#floating-pointsimd-registers
+---
+ dlls/ntdll/unix/signal_arm64.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dlls/ntdll/unix/signal_arm64.c b/dlls/ntdll/unix/signal_arm64.c
+index 226bac0c5e8..16340a561f9 100644
+--- a/dlls/ntdll/unix/signal_arm64.c
++++ b/dlls/ntdll/unix/signal_arm64.c
+@@ -919,7 +919,7 @@ __ASM_GLOBAL_FUNC( call_user_mode_callback,
+                    "mov x18, x4\n\t"              /* teb */
+                    "mrs x1, fpcr\n\t"
+                    "mrs x2, fpsr\n\t"
+-                   "bfi x1, x2, #0, #32\n\t"
++                   "bfi x1, x2, #32, #32\n\t"
+                    "ldr x2, [x18]\n\t"            /* teb->Tib.ExceptionList */
+                    "stp x1, x2, [x29, #0xb0]\n\t"
+ 
