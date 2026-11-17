@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: airidosas252 <airidaslideikis@gmail.com>
+Date: Tue, 17 Nov 2026 14:52:56 +0200
+Subject: [PATCH 19/19] ntdll: Return RBP for CONTEXT_INTEGER requests on
+ ARM64EC.
+
+RBP maps to the ARM64 fp control register, see
+https://learn.microsoft.com/en-us/cpp/build/arm64ec-windows-abi-conventions#register-mapping-for-integer-registers
+and winnt.h: "CONTEXT_INTEGER specifies Rax, Rcx, Rdx, Rbx, Rbp, ...".
+---
+ dlls/ntdll/signal_arm64ec.c | 13 ++++++++++---
+ 1 file changed, 10 insertions(+), 3 deletions(-)
+
+diff --git a/dlls/ntdll/signal_arm64ec.c b/dlls/ntdll/signal_arm64ec.c
+index 9c303436196..6d808d241be 100644
+--- a/dlls/ntdll/signal_arm64ec.c
++++ b/dlls/ntdll/signal_arm64ec.c
+@@ -719,10 +719,17 @@ NTSTATUS SYSCALL_API NtFreeVirtualMemory( HANDLE process, PVOID *addr_ptr, SIZE_
+ 
+ NTSTATUS SYSCALL_API NtGetContextThread( HANDLE handle, CONTEXT *context )
+ {
+-    ARM64_NT_CONTEXT arm_ctx = { .ContextFlags = ctx_flags_x64_to_arm( context->ContextFlags ) };
+-    NTSTATUS status = syscall_NtGetContextThread( handle, &arm_ctx );
++    ULONG flags = context->ContextFlags;
++    ARM64_NT_CONTEXT arm_ctx = { .ContextFlags = ctx_flags_x64_to_arm( flags ) };
++    NTSTATUS status;
+ 
+-    if (!status) context_arm_to_x64( (ARM64EC_NT_CONTEXT *)context, &arm_ctx );
++    /* rbp is an integer register on x64, but its ARM64 counterpart fp is a control register */
++    if (flags & CONTEXT_AMD64_INTEGER & ~CONTEXT_AMD64) arm_ctx.ContextFlags |= CONTEXT_ARM64_CONTROL;
++    status = syscall_NtGetContextThread( handle, &arm_ctx );
++    if (status) return status;
++    context_arm_to_x64( (ARM64EC_NT_CONTEXT *)context, &arm_ctx );
++    if (!(flags & CONTEXT_AMD64_CONTROL & ~CONTEXT_AMD64))
++        context->ContextFlags &= ~(CONTEXT_AMD64_CONTROL & ~CONTEXT_AMD64);
+     return status;
+ }
+ 
