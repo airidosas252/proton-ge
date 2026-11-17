@@ -16,7 +16,7 @@ jobs:
     name: Build
     uses: ./.github/workflows/_job_build.yml
     with:
-      name: ${{ github.ref_name }}
+      name: ${{ github.ref_name }}-aarch64
 
   release:
     name: Release
@@ -53,7 +53,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - name: ${{ github.ref_name }}
+          - name: ${{ github.ref_name }}-aarch64
     uses: ./.github/workflows/_job_upload.yml
     with:
       version: ${{ github.ref_name }}
