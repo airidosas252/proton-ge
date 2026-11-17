@@ -52,6 +52,8 @@ jobs:
 
       - name: Patch
         run: |
+          # git.kernel.org often times out from GitHub's runners, so take sbc from Google's mirror of it
+          git config --global url."https://kernel.googlesource.com/pub/scm/bluetooth/sbc".insteadOf https://git.kernel.org/pub/scm/bluetooth/sbc.git
           git submodule update --init --filter=tree:0 --recursive
           # apply proton-ge-custom patches
           ./patches/protonprep-valve-staging.sh || true
