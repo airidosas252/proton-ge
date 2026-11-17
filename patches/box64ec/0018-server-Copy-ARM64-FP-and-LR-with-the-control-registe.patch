@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: airidosas252 <airidaslideikis@gmail.com>
+Date: Tue, 17 Nov 2026 14:51:30 +0200
+Subject: [PATCH 18/19] server: Copy ARM64 FP and LR with the control
+ registers.
+
+They are stored with the integer registers, so CONTEXT_CONTROL requests
+lost them and CONTEXT_INTEGER requests overwrote them. winnt.h in the
+Windows SDK: "CONTEXT_CONTROL specifies FP, LR, SP, PC, and CPSR".
+---
+ server/thread.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/server/thread.c b/server/thread.c
+index aeffb9452ef..41f2e3d0050 100644
+--- a/server/thread.c
++++ b/server/thread.c
+@@ -1683,7 +1683,12 @@ void kill_thread( struct thread *thread, int violent_death )
+ /* copy parts of a context structure */
+ static void copy_context( struct context_data *to, const struct context_data *from, unsigned int flags )
+ {
++    unsigned __int64 fp_lr[2];
++
+     assert( to->machine == from->machine );
++    /* ARM64 fp and lr are control registers, but they are stored after x19-x28 */
++    if (to->machine == IMAGE_FILE_MACHINE_ARM64)
++        memcpy( fp_lr, ((flags & SERVER_CTX_CONTROL) ? from : to)->integer.arm64_regs.x19 + 10, sizeof(fp_lr) );
+     if (flags & SERVER_CTX_CONTROL) to->ctl = from->ctl;
+     if (flags & SERVER_CTX_INTEGER) to->integer = from->integer;
+     if (flags & SERVER_CTX_SEGMENTS) to->seg = from->seg;
+@@ -1693,6 +1698,8 @@ static void copy_context( struct context_data *to, const struct context_data *fr
+     if (flags & SERVER_CTX_YMM_REGISTERS) to->ymm = from->ymm;
+     if (flags & SERVER_CTX_EXEC_SPACE) to->exec_space = from->exec_space;
+     if (flags & SERVER_CTX_TLS) to->tls = from->tls;
++    if (to->machine == IMAGE_FILE_MACHINE_ARM64)
++        memcpy( to->integer.arm64_regs.x19 + 10, fp_lr, sizeof(fp_lr) );
+ }
+ 
+ /* gets the current impersonation token */
