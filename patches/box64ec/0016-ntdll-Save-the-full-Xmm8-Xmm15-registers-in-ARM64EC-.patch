@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: airidosas252 <airidaslideikis@gmail.com>
+Date: Tue, 17 Nov 2026 14:50:47 +0200
+Subject: [PATCH 16/19] ntdll: Save the full Xmm8-Xmm15 registers in ARM64EC
+ _setjmpex.
+
+d9, d11, d13 and d15 ended up in the wrong slots, and their low halves
+are nonvolatile, see
+https://learn.microsoft.com/en-us/cpp/build/arm64ec-windows-abi-conventions#register-mapping-for-vector-registers
+---
+ dlls/ntdll/signal_arm64ec.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/dlls/ntdll/signal_arm64ec.c b/dlls/ntdll/signal_arm64ec.c
+index 1f7255f1d00..9c303436196 100644
+--- a/dlls/ntdll/signal_arm64ec.c
++++ b/dlls/ntdll/signal_arm64ec.c
+@@ -1547,10 +1547,10 @@ int __attribute__((naked)) NTDLL__setjmpex( _JUMP_BUFFER *buf, void *frame )
+          "stp x19, x20, [x0, #0x30]\n\t"   /* jmp_buf->R12,R13 */
+          "stp x21, x22, [x0, #0x40]\n\t"   /* jmp_buf->R14,R15 */
+          "str x30,      [x0, #0x50]\n\t"   /* jmp_buf->Rip */
+-         "stp d8, d9,   [x0, #0x80]\n\t"   /* jmp_buf->Xmm8,Xmm9 */
+-         "stp d10, d11, [x0, #0xa0]\n\t"   /* jmp_buf->Xmm10,Xmm11 */
+-         "stp d12, d13, [x0, #0xc0]\n\t"   /* jmp_buf->Xmm12,Xmm13 */
+-         "stp d14, d15, [x0, #0xe0]\n\t"   /* jmp_buf->Xmm14,Xmm15 */
++         "stp q8, q9,   [x0, #0x80]\n\t"   /* jmp_buf->Xmm8,Xmm9 */
++         "stp q10, q11, [x0, #0xa0]\n\t"   /* jmp_buf->Xmm10,Xmm11 */
++         "stp q12, q13, [x0, #0xc0]\n\t"   /* jmp_buf->Xmm12,Xmm13 */
++         "stp q14, q15, [x0, #0xe0]\n\t"   /* jmp_buf->Xmm14,Xmm15 */
+          "mrs x1, fpcr\n\t"
+          "mrs x2, fpsr\n\t"
+          "b \"#do_setjmpex\"\n\t"
