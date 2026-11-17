@@ -1026,6 +1026,8 @@ endif # WITHOUT_VKLAYERS
 ## FEX
 ##
 
+# Box64EC and WowBox64 replace FEX as the default emulators, so FEX is only built with WITH_FEX=1.
+ifeq ($(WITH_FEX),1)
 ifneq ($(findstring aarch64,$(unix_ARCHS)),)
 FEX_COMMON_CMAKE_ARGS = \
   -DENABLE_FEXCORE_PROFILER=True -DENABLE_LTO=False \
@@ -1074,6 +1076,7 @@ $(FEX_CONFIG_JSON): $(SRCDIR)/FEX_Config.json
 
 default_pfx: fex $(FEX_CONFIG_JSON)
 endif
+endif # WITH_FEX
 
 
 ##
