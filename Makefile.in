@@ -1085,18 +1085,26 @@ endif # WITH_FEX
 
 ifneq ($(findstring aarch64,$(unix_ARCHS)),)
 # Only the two PE DLLs are built, with Box64's own llvm-mingw toolchain files and flags,
-# so they match the DLLs Box64 releases (Proton's unix CFLAGS would otherwise reach them).
-BOX64_CMAKE_ARGS = -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS= -DCMAKE_ASM_FLAGS= \
-  -DARM64=ON -DARM64EC=ON -DWOW64=ON -DNOBOX64=ON
+# so they match the DLLs Box64 releases. The generic cmake rules would pass Proton's unix
+# CFLAGS and run an install target that a NOBOX64 build doesn't have.
+BOX64_CMAKE_ARGS = -DCMAKE_BUILD_TYPE=Release -DARM64=ON -DARM64EC=ON -DWOW64=ON -DNOBOX64=ON
 
 $(eval $(call rules-source,box64,$(SRCDIR)/box64))
-$(eval $(call rules-cmake,box64,aarch64,unix))
+$(eval $(call create-rules-common,box64,BOX64,aarch64,unix))
 
-$(OBJ)/.box64-aarch64-post-build:
-	mkdir -p $(BOX64_aarch64_DST)/lib/wine/aarch64-windows
-	cp -a $(BOX64_aarch64_OBJ)/box64ec-prefix/src/box64ec-build/box64ec.dll \
-	      $(BOX64_aarch64_OBJ)/wowbox64-prefix/src/wowbox64-build/wowbox64.dll \
-	      $(BOX64_aarch64_DST)/lib/wine/aarch64-windows/
+$(OBJ)/.box64-aarch64-configure:
+	@echo ":: configuring box64-aarch64..." >&2
+	rm -rf "$(BOX64_aarch64_OBJ)/CMakeCache.txt"
+	cd "$(BOX64_aarch64_OBJ)" && cmake "$(BOX64_SRC)" $(BOX64_CMAKE_ARGS)
+	touch $@
+
+$(OBJ)/.box64-aarch64-build:
+	@echo ":: building box64-aarch64..." >&2
+	+$(MAKE) -C "$(BOX64_aarch64_OBJ)" box64ec wowbox64
+	mkdir -p "$(BOX64_aarch64_DST)/lib/wine/aarch64-windows"
+	cp -a "$(BOX64_aarch64_OBJ)/box64ec-prefix/src/box64ec-build/box64ec.dll" \
+	      "$(BOX64_aarch64_OBJ)/wowbox64-prefix/src/wowbox64-build/wowbox64.dll" \
+	      "$(BOX64_aarch64_DST)/lib/wine/aarch64-windows/"
 	touch $@
 
 default_pfx: box64
